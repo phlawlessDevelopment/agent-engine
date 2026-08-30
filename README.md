@@ -302,7 +302,7 @@ Clock gameClock() {
 ## Run the reference app
 
 ```bash
-./mvnw -pl examples/tictactoe spring-boot:run
+./mvnw -pl examples/tictactoe -am spring-boot:run
 ```
 
 ## Verify

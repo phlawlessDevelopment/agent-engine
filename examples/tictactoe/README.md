@@ -5,7 +5,7 @@ Runnable two-player server example using `TicTacToeRules`.
 Run:
 
 ```bash
-./mvnw -pl examples/tictactoe spring-boot:run
+./mvnw -pl examples/tictactoe -am spring-boot:run
 ```
 
 Optional client skill:

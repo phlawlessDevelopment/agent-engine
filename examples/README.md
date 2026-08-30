@@ -13,7 +13,7 @@ Each server example is a separate Spring Boot module with exactly one `GameRules
 ## Run A Server Example
 
 ```bash
-./mvnw -pl examples/tictactoe spring-boot:run
+./mvnw -pl examples/tictactoe -am spring-boot:run
 ```
 
 Swap `tictactoe` for `wait` or `starter`.
