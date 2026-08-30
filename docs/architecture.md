@@ -5,14 +5,14 @@
 Repository modules:
 
 - `engine`: framework contracts + orchestration
-- `examples`: runnable app + sample `GameRules` implementations
+- `examples`: multi-module sample applications and client skills
 
 - `game.api`: HTTP transport, request validation, response mapping
 - `game.application`: orchestration and use cases (`GameService`)
 - `game.domain`: authoritative simulation state, event emission, the `GameRules` SPI
 - `game.infrastructure`: in-memory repository
 - `autoconfigure`: Spring Boot auto-configuration that wires API/service defaults
-- `examples.*`: game-specific rule modules (`wait`, `tictactoe`); the app wires one active `GameRules` bean
+- `examples/<game>`: one runnable Spring Boot app per game, each wiring one active `GameRules` bean
 
 ## Core principles
 
@@ -28,7 +28,7 @@ A rules module declares its action vocabulary, how to construct fresh state,
 and how to evaluate a command:
 
 ```
-GameRules.evaluate(state, command, turn, now) -> RuleResult(accepted, message, nextState, events)
+GameRules.evaluate(state, command, player, turn, now) -> RuleResult(accepted, message, nextState, events)
 ```
 
 The engine owns session lifecycle, event sequencing, turn advancement (only for

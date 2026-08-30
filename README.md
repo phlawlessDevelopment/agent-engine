@@ -16,18 +16,18 @@ You provide exactly one `GameRules` bean, and the library provides:
 | Module | Purpose |
 | --- | --- |
 | `engine` | Reusable library consumed by other Spring Boot apps |
-| `examples` | Runnable sample app that consumes `engine` |
+| `examples` | Aggregator for runnable server examples + client skills |
 
 Example rule implementations:
 
-- `examples/src/main/java/dev/phlawless/agentengine/examples/tictactoe`
-- `examples/src/main/java/dev/phlawless/agentengine/examples/wait`
-- `examples/src/main/java/dev/phlawless/agentengine/examples/starter`
+- `examples/tictactoe/src/main/java/dev/phlawless/agentengine/examples/tictactoe`
+- `examples/wait/src/main/java/dev/phlawless/agentengine/examples/wait`
+- `examples/starter/src/main/java/dev/phlawless/agentengine/examples/starter`
 
 Client-side agent examples:
 
-- `examples/clients`
-- `examples/clients/tictactoe/agent-engine-tictactoe-player/SKILL.md`
+- `examples/README.md`
+- `examples/tictactoe/clients/agent-engine-tictactoe-player/SKILL.md`
 
 ## Add to your project
 
@@ -302,7 +302,7 @@ Clock gameClock() {
 ## Run the reference app
 
 ```bash
-./mvnw -pl examples spring-boot:run
+./mvnw -pl examples/tictactoe spring-boot:run
 ```
 
 ## Verify
