@@ -24,6 +24,11 @@ Example rule implementations:
 - `examples/src/main/java/dev/phlawless/agentengine/examples/wait`
 - `examples/src/main/java/dev/phlawless/agentengine/examples/starter`
 
+Client-side agent examples:
+
+- `examples/clients`
+- `examples/clients/tictactoe/agent-engine-tictactoe-player/SKILL.md`
+
 ## Add to your project
 
 Until a Maven Central release is published, install locally first:
