@@ -7,6 +7,9 @@ import java.util.UUID;
 
 public record GameSnapshot(
         UUID gameId,
+        int requiredPlayerCount,
+        boolean ready,
+        List<GameParticipant> participants,
         List<String> actionTypes,
         int turn,
         Map<String, Object> state,

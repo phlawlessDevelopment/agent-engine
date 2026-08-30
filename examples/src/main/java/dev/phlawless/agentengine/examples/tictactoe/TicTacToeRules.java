@@ -4,6 +4,7 @@ import dev.phlawless.agentengine.game.domain.Command;
 import dev.phlawless.agentengine.game.domain.EventSpec;
 import dev.phlawless.agentengine.game.domain.GameRules;
 import dev.phlawless.agentengine.game.domain.GameState;
+import dev.phlawless.agentengine.game.domain.PlayerContext;
 import dev.phlawless.agentengine.game.domain.RuleResult;
 
 import java.time.Instant;
@@ -26,6 +27,11 @@ public class TicTacToeRules implements GameRules {
     };
 
     @Override
+    public int requiredPlayerCount() {
+        return 2;
+    }
+
+    @Override
     public Set<String> actionTypes() {
         return Set.of(PLACE_MARKER_ACTION);
     }
@@ -36,7 +42,7 @@ public class TicTacToeRules implements GameRules {
     }
 
     @Override
-    public RuleResult evaluate(GameState state, Command command, int turn, Instant now) {
+    public RuleResult evaluate(GameState state, Command command, PlayerContext player, int turn, Instant now) {
         if (!(state instanceof TicTacToeState gameState)) {
             return RuleResult.reject("Invalid state for tictactoe");
         }
@@ -47,6 +53,11 @@ public class TicTacToeRules implements GameRules {
             return RuleResult.reject("Game is over");
         }
 
+        String expectedMarker = markerForSeat(player.seat());
+        if (!expectedMarker.equals(gameState.currentPlayer())) {
+            return RuleResult.reject("It is not your turn");
+        }
+
         Integer position = parsePosition(command);
         if (position == null) {
             return RuleResult.reject("Position must be an integer between 0 and 8");
@@ -55,7 +66,7 @@ public class TicTacToeRules implements GameRules {
             return RuleResult.reject("Cell already occupied: " + position);
         }
 
-        String marker = gameState.currentPlayer();
+        String marker = expectedMarker;
         List<String> nextBoard = new ArrayList<>(gameState.board());
         nextBoard.set(position, marker);
 
@@ -120,5 +131,13 @@ public class TicTacToeRules implements GameRules {
 
     private String opponent(String marker) {
         return TicTacToeState.PLAYER_X.equals(marker) ? TicTacToeState.PLAYER_O : TicTacToeState.PLAYER_X;
+    }
+
+    private String markerForSeat(int seat) {
+        return switch (seat) {
+            case 0 -> TicTacToeState.PLAYER_X;
+            case 1 -> TicTacToeState.PLAYER_O;
+            default -> throw new IllegalArgumentException("Unsupported player seat: " + seat);
+        };
     }
 }

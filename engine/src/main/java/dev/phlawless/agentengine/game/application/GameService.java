@@ -1,5 +1,6 @@
 package dev.phlawless.agentengine.game.application;
 
+import dev.phlawless.agentengine.account.domain.AccountIdentity;
 import dev.phlawless.agentengine.game.domain.Command;
 import dev.phlawless.agentengine.game.domain.Game;
 import dev.phlawless.agentengine.game.domain.GameEvent;
@@ -26,32 +27,46 @@ public class GameService {
         this.clock = clock;
     }
 
-    public GameSnapshot createGame() {
-        Game game = Game.create(UUID.randomUUID(), rules, Instant.now(clock));
+    public GameSnapshot createGame(AccountIdentity creator) {
+        Game game = Game.create(UUID.randomUUID(), rules, creator, Instant.now(clock));
         gameRepository.save(game);
         return game.snapshot();
     }
 
-    public GameSnapshot getState(UUID gameId) {
-        return withGame(gameId, Game::snapshot);
+    public GameSnapshot joinGame(UUID gameId, AccountIdentity account) {
+        return withGame(gameId, game -> {
+            game.join(account, Instant.now(clock));
+            gameRepository.save(game);
+            return game.snapshot();
+        });
     }
 
-    public ActionExecutionResult executeAction(UUID gameId, Command command) {
+    public GameSnapshot getState(UUID gameId, UUID accountId) {
+        return withGame(gameId, game -> {
+            game.requireParticipant(accountId);
+            return game.snapshot();
+        });
+    }
+
+    public ActionExecutionResult executeAction(UUID gameId, UUID accountId, Command command) {
         return withGame(gameId, game -> {
             long latestBefore = game.latestEventSequence();
-            RuleResult result = game.apply(command, Instant.now(clock));
+            RuleResult result = game.apply(accountId, command, Instant.now(clock));
             gameRepository.save(game);
             List<GameEvent> emitted = game.eventsAfter(latestBefore);
             return new ActionExecutionResult(result.accepted(), result.message(), game.snapshot(), emitted);
         });
     }
 
-    public List<GameEvent> getEvents(UUID gameId, long afterSequence) {
+    public List<GameEvent> getEvents(UUID gameId, UUID accountId, long afterSequence) {
         if (afterSequence < 0) {
             throw new IllegalArgumentException("afterSequence must be >= 0");
         }
 
-        return withGame(gameId, game -> game.eventsAfter(afterSequence));
+        return withGame(gameId, game -> {
+            game.requireParticipant(accountId);
+            return game.eventsAfter(afterSequence);
+        });
     }
 
     private <T> T withGame(UUID gameId, java.util.function.Function<Game, T> operation) {

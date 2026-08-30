@@ -1,5 +1,8 @@
 package dev.phlawless.agentengine.autoconfigure;
 
+import dev.phlawless.agentengine.account.application.AccountRepository;
+import dev.phlawless.agentengine.account.application.AccountService;
+import dev.phlawless.agentengine.account.infrastructure.InMemoryAccountRepository;
 import dev.phlawless.agentengine.game.api.GameController;
 import dev.phlawless.agentengine.game.api.RestExceptionHandler;
 import dev.phlawless.agentengine.game.application.GameRepository;
@@ -7,6 +10,7 @@ import dev.phlawless.agentengine.game.application.GameService;
 import dev.phlawless.agentengine.game.domain.Command;
 import dev.phlawless.agentengine.game.domain.GameRules;
 import dev.phlawless.agentengine.game.domain.GameState;
+import dev.phlawless.agentengine.game.domain.PlayerContext;
 import dev.phlawless.agentengine.game.domain.RuleResult;
 import dev.phlawless.agentengine.game.infrastructure.InMemoryGameRepository;
 import org.junit.jupiter.api.Test;
@@ -14,6 +18,7 @@ import org.springframework.boot.autoconfigure.AutoConfigurations;
 import org.springframework.boot.test.context.runner.WebApplicationContextRunner;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.security.web.SecurityFilterChain;
 
 import java.time.Clock;
 import java.time.Instant;
@@ -23,11 +28,13 @@ import java.util.Set;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.mock;
 
 class AgentEngineAutoConfigurationTest {
 
     private final WebApplicationContextRunner contextRunner = new WebApplicationContextRunner()
-            .withConfiguration(AutoConfigurations.of(AgentEngineAutoConfiguration.class));
+            .withConfiguration(AutoConfigurations.of(AgentEngineAutoConfiguration.class))
+            .withUserConfiguration(NoopSecurityChainConfig.class);
 
     @Test
     void autoConfigurationCreatesDefaultBeansWithSingleGameRules() {
@@ -37,6 +44,9 @@ class AgentEngineAutoConfigurationTest {
                     assertThat(context).hasSingleBean(GameRules.class);
                     assertThat(context).hasSingleBean(GameRepository.class);
                     assertThat(context).hasSingleBean(InMemoryGameRepository.class);
+                    assertThat(context).hasSingleBean(AccountRepository.class);
+                    assertThat(context).hasSingleBean(InMemoryAccountRepository.class);
+                    assertThat(context).hasSingleBean(AccountService.class);
                     assertThat(context).hasSingleBean(Clock.class);
                     assertThat(context).hasSingleBean(GameService.class);
                     assertThat(context).hasSingleBean(GameController.class);
@@ -143,6 +153,14 @@ class AgentEngineAutoConfigurationTest {
         }
     }
 
+    @Configuration(proxyBeanMethods = false)
+    static class NoopSecurityChainConfig {
+        @Bean
+        SecurityFilterChain securityFilterChain() {
+            return mock(SecurityFilterChain.class);
+        }
+    }
+
     static final class CustomGameRepository implements GameRepository {
         @Override
         public java.util.Optional<dev.phlawless.agentengine.game.domain.Game> findById(UUID gameId) {
@@ -156,6 +174,11 @@ class AgentEngineAutoConfigurationTest {
 
     static final class StubGameRules implements GameRules {
         @Override
+        public int requiredPlayerCount() {
+            return 1;
+        }
+
+        @Override
         public Set<String> actionTypes() {
             return Set.of("WAIT");
         }
@@ -166,7 +189,7 @@ class AgentEngineAutoConfigurationTest {
         }
 
         @Override
-        public RuleResult evaluate(GameState state, Command command, int turn, Instant now) {
+        public RuleResult evaluate(GameState state, Command command, PlayerContext player, int turn, Instant now) {
             return RuleResult.reject("Not implemented");
         }
     }

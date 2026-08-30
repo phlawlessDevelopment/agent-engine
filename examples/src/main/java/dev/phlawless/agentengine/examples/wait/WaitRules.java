@@ -4,6 +4,7 @@ import dev.phlawless.agentengine.game.domain.Command;
 import dev.phlawless.agentengine.game.domain.EventSpec;
 import dev.phlawless.agentengine.game.domain.GameRules;
 import dev.phlawless.agentengine.game.domain.GameState;
+import dev.phlawless.agentengine.game.domain.PlayerContext;
 import dev.phlawless.agentengine.game.domain.RuleResult;
 
 import java.time.Instant;
@@ -16,6 +17,11 @@ public class WaitRules implements GameRules {
     public static final String TURN_ADVANCED_EVENT = "TURN_ADVANCED";
 
     @Override
+    public int requiredPlayerCount() {
+        return 1;
+    }
+
+    @Override
     public Set<String> actionTypes() {
         return Set.of(WAIT_ACTION);
     }
@@ -26,7 +32,7 @@ public class WaitRules implements GameRules {
     }
 
     @Override
-    public RuleResult evaluate(GameState state, Command command, int turn, Instant now) {
+    public RuleResult evaluate(GameState state, Command command, PlayerContext player, int turn, Instant now) {
         if (!WAIT_ACTION.equals(command.type())) {
             return RuleResult.reject("Unknown action: " + command.type());
         }

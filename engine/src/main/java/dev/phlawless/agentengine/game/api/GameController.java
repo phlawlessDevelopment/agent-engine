@@ -1,14 +1,19 @@
 package dev.phlawless.agentengine.game.api;
 
+import dev.phlawless.agentengine.account.domain.AccountIdentity;
 import dev.phlawless.agentengine.game.application.GameService;
 import dev.phlawless.agentengine.game.domain.Command;
 import dev.phlawless.agentengine.game.domain.GameEvent;
+import dev.phlawless.agentengine.game.domain.GameParticipant;
 import dev.phlawless.agentengine.game.domain.GameSnapshot;
+import dev.phlawless.agentengine.security.AuthenticatedAccount;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -29,24 +34,38 @@ public class GameController {
 
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
-    public CreateGameResponse createGame() {
-        GameSnapshot snapshot = gameService.createGame();
+    public CreateGameResponse createGame(@AuthenticationPrincipal AuthenticatedAccount principal) {
+        GameSnapshot snapshot = gameService.createGame(identity(principal));
         return new CreateGameResponse(toObservableState(snapshot));
     }
 
+    @PutMapping("/{gameId}/players/me")
+    public JoinGameResponse joinGame(
+            @PathVariable UUID gameId,
+            @AuthenticationPrincipal AuthenticatedAccount principal
+    ) {
+        GameSnapshot snapshot = gameService.joinGame(gameId, identity(principal));
+        return new JoinGameResponse(toObservableState(snapshot));
+    }
+
     @GetMapping("/{gameId}/state")
-    public ObservableStateResponse getState(@PathVariable UUID gameId) {
-        GameSnapshot snapshot = gameService.getState(gameId);
+    public ObservableStateResponse getState(
+            @PathVariable UUID gameId,
+            @AuthenticationPrincipal AuthenticatedAccount principal
+    ) {
+        GameSnapshot snapshot = gameService.getState(gameId, principal.accountId());
         return toObservableState(snapshot);
     }
 
     @PostMapping("/{gameId}/actions")
     public SubmitActionResponse submitAction(
             @PathVariable UUID gameId,
+            @AuthenticationPrincipal AuthenticatedAccount principal,
             @Valid @RequestBody SubmitActionRequest request
     ) {
         GameService.ActionExecutionResult result = gameService.executeAction(
                 gameId,
+                principal.accountId(),
                 new Command(request.type(), request.payload()));
         return new SubmitActionResponse(
                 result.accepted(),
@@ -59,9 +78,10 @@ public class GameController {
     @GetMapping("/{gameId}/events")
     public List<EventResponse> getEvents(
             @PathVariable UUID gameId,
+            @AuthenticationPrincipal AuthenticatedAccount principal,
             @RequestParam(name = "afterSequence", defaultValue = "0") long afterSequence
     ) {
-        return gameService.getEvents(gameId, afterSequence)
+        return gameService.getEvents(gameId, principal.accountId(), afterSequence)
                 .stream()
                 .map(this::toEventResponse)
                 .toList();
@@ -70,6 +90,9 @@ public class GameController {
     private ObservableStateResponse toObservableState(GameSnapshot snapshot) {
         return new ObservableStateResponse(
                 snapshot.gameId(),
+                snapshot.requiredPlayerCount(),
+                snapshot.ready(),
+                snapshot.participants().stream().map(this::toParticipantResponse).toList(),
                 snapshot.actionTypes(),
                 snapshot.turn(),
                 snapshot.state(),
@@ -84,7 +107,17 @@ public class GameController {
                 event.turn(),
                 event.type(),
                 event.occurredAt(),
+                event.actorAccountId(),
+                event.actorSeat(),
                 event.details()
         );
+    }
+
+    private GameParticipantResponse toParticipantResponse(GameParticipant participant) {
+        return new GameParticipantResponse(participant.accountId(), participant.username(), participant.seat());
+    }
+
+    private AccountIdentity identity(AuthenticatedAccount principal) {
+        return principal.toIdentity();
     }
 }

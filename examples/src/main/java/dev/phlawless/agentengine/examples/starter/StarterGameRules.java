@@ -4,6 +4,7 @@ import dev.phlawless.agentengine.game.domain.Command;
 import dev.phlawless.agentengine.game.domain.EventSpec;
 import dev.phlawless.agentengine.game.domain.GameRules;
 import dev.phlawless.agentengine.game.domain.GameState;
+import dev.phlawless.agentengine.game.domain.PlayerContext;
 import dev.phlawless.agentengine.game.domain.RuleResult;
 
 import java.time.Instant;
@@ -16,6 +17,11 @@ public class StarterGameRules implements GameRules {
     public static final String TURN_TAKEN_EVENT = "TURN_TAKEN";
 
     @Override
+    public int requiredPlayerCount() {
+        return 1;
+    }
+
+    @Override
     public Set<String> actionTypes() {
         return Set.of(TAKE_TURN_ACTION);
     }
@@ -26,7 +32,7 @@ public class StarterGameRules implements GameRules {
     }
 
     @Override
-    public RuleResult evaluate(GameState state, Command command, int turn, Instant now) {
+    public RuleResult evaluate(GameState state, Command command, PlayerContext player, int turn, Instant now) {
         if (!(state instanceof StarterGameState starterState)) {
             return RuleResult.reject("Invalid state for starter game");
         }

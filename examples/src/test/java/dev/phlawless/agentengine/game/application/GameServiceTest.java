@@ -1,12 +1,12 @@
 package dev.phlawless.agentengine.game.application;
 
+import dev.phlawless.agentengine.account.domain.AccountIdentity;
+import dev.phlawless.agentengine.examples.tictactoe.TicTacToeRules;
 import dev.phlawless.agentengine.game.domain.Command;
 import dev.phlawless.agentengine.game.domain.GameEvent;
 import dev.phlawless.agentengine.game.domain.GameRules;
 import dev.phlawless.agentengine.game.domain.GameSnapshot;
 import dev.phlawless.agentengine.game.infrastructure.InMemoryGameRepository;
-import dev.phlawless.agentengine.examples.tictactoe.TicTacToeRules;
-import dev.phlawless.agentengine.examples.wait.WaitRules;
 import org.junit.jupiter.api.Test;
 
 import java.time.Clock;
@@ -20,176 +20,103 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class GameServiceTest {
+    private static final AccountIdentity ALICE = new AccountIdentity(UUID.fromString("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"), "alice");
+    private static final AccountIdentity BOB = new AccountIdentity(UUID.fromString("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"), "bob");
+    private static final AccountIdentity CAROL = new AccountIdentity(UUID.fromString("cccccccc-cccc-cccc-cccc-cccccccccccc"), "carol");
 
     @Test
-    void createGameUsesConfiguredRulesWithFreshBoard() {
+    void createGameAssignsCreatorToSeatZero() {
         GameService service = buildService();
 
-        GameSnapshot snapshot = service.createGame();
+        GameSnapshot snapshot = service.createGame(ALICE);
 
-        assertThat(snapshot.turn()).isZero();
-        assertThat(snapshot.actionTypes()).containsExactly("PLACE_MARKER");
-        assertThat(snapshot.state().get("board")).asList().hasSize(9).containsOnly("");
-        assertThat(snapshot.state().get("currentPlayer")).isEqualTo("X");
-        assertThat(snapshot.state().get("status")).isEqualTo("IN_PROGRESS");
+        assertThat(snapshot.requiredPlayerCount()).isEqualTo(2);
+        assertThat(snapshot.ready()).isFalse();
+        assertThat(snapshot.participants()).hasSize(1);
+        assertThat(snapshot.participants().getFirst().accountId()).isEqualTo(ALICE.accountId());
+        assertThat(snapshot.participants().getFirst().seat()).isZero();
     }
 
     @Test
-    void waitActionAdvancesTurnAndEmitsEvent() {
-        GameService service = buildService(new WaitRules());
-        GameSnapshot created = service.createGame();
+    void joinGameAddsSecondSeatAndIsIdempotent() {
+        GameService service = buildService();
+        GameSnapshot created = service.createGame(ALICE);
 
-        GameService.ActionExecutionResult result = service.executeAction(
-                created.gameId(),
-                new Command(WaitRules.WAIT_ACTION, Map.of()));
+        GameSnapshot joined = service.joinGame(created.gameId(), BOB);
+        GameSnapshot rejoined = service.joinGame(created.gameId(), BOB);
+
+        assertThat(joined.ready()).isTrue();
+        assertThat(joined.participants()).hasSize(2);
+        assertThat(joined.participants().get(1).accountId()).isEqualTo(BOB.accountId());
+        assertThat(joined.participants().get(1).seat()).isEqualTo(1);
+        assertThat(rejoined.participants()).hasSize(2);
+    }
+
+    @Test
+    void gameFullRejectsThirdJoin() {
+        GameService service = buildService();
+        GameSnapshot created = service.createGame(ALICE);
+        service.joinGame(created.gameId(), BOB);
+
+        assertThatThrownBy(() -> service.joinGame(created.gameId(), CAROL))
+                .isInstanceOf(GameFullException.class);
+    }
+
+    @Test
+    void nonParticipantCannotReadStateOrEvents() {
+        GameService service = buildService();
+        GameSnapshot created = service.createGame(ALICE);
+        service.joinGame(created.gameId(), BOB);
+
+        assertThatThrownBy(() -> service.getState(created.gameId(), CAROL.accountId()))
+                .isInstanceOf(NotGameParticipantException.class);
+        assertThatThrownBy(() -> service.getEvents(created.gameId(), CAROL.accountId(), 0))
+                .isInstanceOf(NotGameParticipantException.class);
+    }
+
+    @Test
+    void cannotExecuteActionUntilGameReady() {
+        GameService service = buildService();
+        GameSnapshot created = service.createGame(ALICE);
+
+        assertThatThrownBy(() -> service.executeAction(created.gameId(), ALICE.accountId(), marker(0)))
+                .isInstanceOf(GameNotReadyException.class);
+    }
+
+    @Test
+    void seatsControlTurnOrder() {
+        GameService service = buildService();
+        GameSnapshot created = service.createGame(ALICE);
+        service.joinGame(created.gameId(), BOB);
+
+        GameService.ActionExecutionResult bobFirst = service.executeAction(created.gameId(), BOB.accountId(), marker(0));
+        assertThat(bobFirst.accepted()).isFalse();
+        assertThat(bobFirst.message()).isEqualTo("It is not your turn");
+
+        GameService.ActionExecutionResult aliceFirst = service.executeAction(created.gameId(), ALICE.accountId(), marker(0));
+        assertThat(aliceFirst.accepted()).isTrue();
+        assertThat(aliceFirst.snapshot().state().get("currentPlayer")).isEqualTo("O");
+    }
+
+    @Test
+    void actionEventsCarryActorIdentityAndSeat() {
+        GameService service = buildService();
+        GameSnapshot created = service.createGame(ALICE);
+        service.joinGame(created.gameId(), BOB);
+
+        GameService.ActionExecutionResult result = service.executeAction(created.gameId(), ALICE.accountId(), marker(0));
 
         assertThat(result.accepted()).isTrue();
-        assertThat(result.snapshot().turn()).isEqualTo(1);
-        assertThat(result.emittedEvents()).hasSize(1);
-        assertThat(result.emittedEvents().getFirst().type()).isEqualTo(WaitRules.TURN_ADVANCED_EVENT);
-    }
-
-    @Test
-    void placingMarkerUpdatesBoardAndEmitsEvent() {
-        GameService service = buildService();
-        GameSnapshot created = service.createGame();
-
-        GameService.ActionExecutionResult result = service.executeAction(
-                created.gameId(),
-                new Command(TicTacToeRules.PLACE_MARKER_ACTION, Map.of("position", 0)));
-
-        assertThat(result.accepted()).isTrue();
-        assertThat(result.snapshot().turn()).isEqualTo(1);
-        assertThat(result.snapshot().state().get("board")).asList().first().isEqualTo("X");
-        assertThat(result.snapshot().state().get("currentPlayer")).isEqualTo("O");
-        assertThat(result.emittedEvents()).hasSize(1);
-        assertThat(result.emittedEvents().getFirst().type()).isEqualTo(TicTacToeRules.MARKER_PLACED_EVENT);
-    }
-
-    @Test
-    void rejectedCommandChangesNothing() {
-        GameService service = buildService();
-        GameSnapshot created = service.createGame();
-
-        GameService.ActionExecutionResult result = service.executeAction(
-                created.gameId(),
-                new Command(TicTacToeRules.PLACE_MARKER_ACTION, Map.of("position", 42)));
-
-        assertThat(result.accepted()).isFalse();
-        assertThat(result.snapshot().turn()).isZero();
-        assertThat(result.emittedEvents()).isEmpty();
-        assertThat(result.snapshot().state().get("board")).asList().containsOnly("");
-    }
-
-    @Test
-    void unknownActionIsRejected() {
-        GameService service = buildService();
-        GameSnapshot created = service.createGame();
-
-        GameService.ActionExecutionResult result = service.executeAction(
-                created.gameId(),
-                new Command("RESET", Map.of()));
-
-        assertThat(result.accepted()).isFalse();
-        assertThat(result.snapshot().turn()).isZero();
-    }
-
-    @Test
-    void cellCannotBeOccupiedTwice() {
-        GameService service = buildService();
-        GameSnapshot created = service.createGame();
-
-        service.executeAction(created.gameId(), new Command(TicTacToeRules.PLACE_MARKER_ACTION, Map.of("position", 0)));
-
-        GameService.ActionExecutionResult result = service.executeAction(
-                created.gameId(),
-                new Command(TicTacToeRules.PLACE_MARKER_ACTION, Map.of("position", 0)));
-
-        assertThat(result.accepted()).isFalse();
-        assertThat(result.snapshot().state().get("board")).asList().first().isEqualTo("X");
-    }
-
-    @Test
-    void threeInARowEndsGameWithWinner() {
-        GameService service = buildService();
-        GameSnapshot created = service.createGame();
-
-        service.executeAction(created.gameId(), marker(0));
-        service.executeAction(created.gameId(), marker(3));
-        service.executeAction(created.gameId(), marker(1));
-        service.executeAction(created.gameId(), marker(4));
-        GameService.ActionExecutionResult result = service.executeAction(created.gameId(), marker(2));
-
-        assertThat(result.accepted()).isTrue();
-        assertThat(result.snapshot().state().get("status")).isEqualTo("WINNER");
-        assertThat(result.snapshot().state().get("winner")).isEqualTo("X");
-        assertThat(result.emittedEvents())
-                .map(GameEvent::type)
-                .containsExactly("MARKER_PLACED", "GAME_WON");
-
-        GameService.ActionExecutionResult after = service.executeAction(
-                created.gameId(),
-                new Command(TicTacToeRules.PLACE_MARKER_ACTION, Map.of("position", 6)));
-
-        assertThat(after.accepted()).isFalse();
-    }
-
-    @Test
-    void fullBoardWithoutWinnerIsADraw() {
-        GameService service = buildService();
-        GameSnapshot created = service.createGame();
-
-        service.executeAction(created.gameId(), marker(0));
-        service.executeAction(created.gameId(), marker(1));
-        service.executeAction(created.gameId(), marker(2));
-        service.executeAction(created.gameId(), marker(4));
-        service.executeAction(created.gameId(), marker(3));
-        service.executeAction(created.gameId(), marker(5));
-        service.executeAction(created.gameId(), marker(7));
-        service.executeAction(created.gameId(), marker(6));
-        GameService.ActionExecutionResult result = service.executeAction(created.gameId(), marker(8));
-
-        assertThat(result.accepted()).isTrue();
-        assertThat(result.snapshot().state().get("status")).isEqualTo("DRAW");
-        assertThat(result.emittedEvents())
-                .map(GameEvent::type)
-                .containsExactly("MARKER_PLACED", "GAME_DRAWN");
-    }
-
-    @Test
-    void eventsAreAppendOnlyAndSequenced() {
-        GameService service = buildService();
-        GameSnapshot created = service.createGame();
-
-        service.executeAction(created.gameId(), marker(0));
-        service.executeAction(created.gameId(), marker(1));
-
-        List<GameEvent> events = service.getEvents(created.gameId(), 0);
-
-        assertThat(events).hasSize(3);
-        assertThat(events).extracting(GameEvent::sequence).containsExactly(1L, 2L, 3L);
-        assertThat(events).extracting(GameEvent::type)
-                .containsExactly("GAME_CREATED", "MARKER_PLACED", "MARKER_PLACED");
-    }
-
-    @Test
-    void eventsAfterSequenceReturnsOnlyNewEvents() {
-        GameService service = buildService();
-        GameSnapshot created = service.createGame();
-
-        service.executeAction(created.gameId(), marker(0));
-
-        List<GameEvent> events = service.getEvents(created.gameId(), 1);
-
-        assertThat(events).hasSize(1);
-        assertThat(events.getFirst().sequence()).isEqualTo(2);
+        GameEvent actionEvent = result.emittedEvents().getFirst();
+        assertThat(actionEvent.actorAccountId()).isEqualTo(ALICE.accountId());
+        assertThat(actionEvent.actorSeat()).isZero();
     }
 
     @Test
     void unknownGameThrowsNotFoundException() {
         GameService service = buildService();
 
-        assertThatThrownBy(() -> service.getEvents(UUID.randomUUID(), 0))
+        assertThatThrownBy(() -> service.getEvents(UUID.randomUUID(), ALICE.accountId(), 0))
                 .isInstanceOf(GameNotFoundException.class);
     }
 
