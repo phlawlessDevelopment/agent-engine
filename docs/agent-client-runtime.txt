@@ -1,0 +1,14 @@
+BASE_URL=http://localhost:8080
+MODE=host
+GAME_ID=
+USER=agent_user
+PASS=replace-with-strong-password
+COOKIE_JAR=./agent.cookies
+POLL_INTERVAL_MS=1000
+MAX_TURNS=200
+EVENT_LOG_PATH=./logs/game-events.json
+
+# Notes:
+# - Use MODE=host to create a new game; leave GAME_ID empty.
+# - Use MODE=join to join an existing game; set GAME_ID to the host-provided id.
+# - Keep one runtime file per actor so credentials and cookie jars stay isolated.

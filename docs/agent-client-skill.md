@@ -20,7 +20,8 @@ Given a running Agent Engine server, the agent should be able to:
 
 ## Assumptions
 
-- Base URL is available (example: `http://localhost:8080`).
+- Runtime values are provided in a text file (example:
+  `docs/agent-client-runtime.txt`).
 - API base path is `/api/v1`.
 - Session auth + CSRF are enabled.
 - `jq` is available for JSON extraction.
@@ -31,7 +32,32 @@ Optional runtime controls:
 - state/event polling interval,
 - path for the final event log.
 
+## Runtime Context File
+
+Before starting, read a plain-text runtime file and export its values as shell
+variables. Use this repo template:
+
+- `docs/agent-client-runtime.txt`
+
+Expected keys:
+
+- `BASE_URL`
+- `MODE` (`host` or `join`)
+- `GAME_ID` (required when `MODE=join`)
+- `USER`
+- `PASS`
+- `COOKIE_JAR`
+- `POLL_INTERVAL_MS` (optional)
+- `MAX_TURNS` (optional)
+- `EVENT_LOG_PATH` (optional)
+
+If a key is missing, apply safe defaults from the template. Do not assume the
+game ID unless it is explicitly provided for join mode.
+
 ## Required Endpoints
+
+This is the complete client API needed to play a game. Do not inspect server
+source code or probe unlisted routes to infer the workflow.
 
 - `GET /api/v1/auth/csrf`
 - `POST /api/v1/accounts`
@@ -46,53 +72,140 @@ Optional runtime controls:
 
 ## Core Protocol Rules
 
+Use the same cookie jar for every request made by one actor. Every curl command,
+including the CSRF request, must both load and save that jar:
+
+```bash
+-b "$COOKIE_JAR" -c "$COOKIE_JAR"
+```
+
+Using `-c` without `-b` is destructive after login: curl does not send the
+authenticated `JSESSIONID`, then rewrites the jar without it. The next protected
+request receives an empty `403` response.
+
 For every mutating request (`POST`, `PUT`, `DELETE`), send all of:
 
 - session cookie (`JSESSIONID`) via cookie jar,
 - CSRF cookie (`XSRF-TOKEN`) via cookie jar,
-- CSRF header (`X-XSRF-TOKEN`) with token value.
+- CSRF header (`X-XSRF-TOKEN`) with the `.token` value returned by
+  `GET /api/v1/auth/csrf`.
 
-If CSRF fails, refresh via `GET /api/v1/auth/csrf` and retry once.
+The JSON token may differ from the `XSRF-TOKEN` cookie because Spring Security
+masks the value. Use the JSON `.token` in the header; do not read the header
+value from the cookie jar.
+
+Shell variables do not persist between agent tool calls. Re-read the runtime
+file and re-declare at least `BASE_URL`, `COOKIE_JAR`, and `GAME_ID` (if joining)
+when starting a new shell command. Never delete or replace the cookie jar after
+login.
 
 ## Bootstrapping One User Session
 
+Run this to register a new account and log in. If the account already exists,
+skip the registration request. Usernames must be 3-50 characters using letters,
+digits, `.`, `_`, or `-`; passwords must be 12-72 characters.
+
 ```bash
+set -euo pipefail
+
 BASE_URL="http://localhost:8080"
 USER="agent_user"
 PASS="replace-with-strong-password"
-COOKIE_JAR="agent.cookies"
+COOKIE_JAR="./agent.cookies"
+touch "$COOKIE_JAR"
 
-CSRF=$(curl -s -c "$COOKIE_JAR" "$BASE_URL/api/v1/auth/csrf" | jq -r '.token')
+CREDENTIALS=$(jq -nc \
+  --arg username "$USER" \
+  --arg password "$PASS" \
+  '{username: $username, password: $password}')
 
-curl -s -b "$COOKIE_JAR" -c "$COOKIE_JAR" \
+CSRF=$(curl --fail-with-body --silent --show-error \
+  -b "$COOKIE_JAR" -c "$COOKIE_JAR" \
+  "$BASE_URL/api/v1/auth/csrf" | jq -er '.token')
+
+curl --fail-with-body --silent --show-error \
+  -b "$COOKIE_JAR" -c "$COOKIE_JAR" \
   -H "content-type: application/json" \
   -H "X-XSRF-TOKEN: $CSRF" \
   -X POST "$BASE_URL/api/v1/accounts" \
-  -d "{\"username\":\"$USER\",\"password\":\"$PASS\"}"
+  -d "$CREDENTIALS"
 
-curl -s -b "$COOKIE_JAR" -c "$COOKIE_JAR" \
+CSRF=$(curl --fail-with-body --silent --show-error \
+  -b "$COOKIE_JAR" -c "$COOKIE_JAR" \
+  "$BASE_URL/api/v1/auth/csrf" | jq -er '.token')
+
+curl --fail-with-body --silent --show-error \
+  -b "$COOKIE_JAR" -c "$COOKIE_JAR" \
   -H "content-type: application/json" \
   -H "X-XSRF-TOKEN: $CSRF" \
   -X POST "$BASE_URL/api/v1/auth/login" \
-  -d "{\"username\":\"$USER\",\"password\":\"$PASS\"}"
+  -d "$CREDENTIALS"
+
+curl --fail-with-body --silent --show-error \
+  -b "$COOKIE_JAR" -c "$COOKIE_JAR" \
+  "$BASE_URL/api/v1/auth/me" | jq -e .
 ```
+
+Do not continue unless `/auth/me` returns this actor's `accountId` and
+`username`.
 
 ## Game Setup Flow
 
 ### Option A: Create a game
 
+The creator is automatically added as seat `0`; do not call the join endpoint
+for the host. This endpoint returns `201` with the game ID at `.state.gameId`.
+
 ```bash
-GAME_ID=$(curl -s -b "$COOKIE_JAR" -c "$COOKIE_JAR" \
+set -euo pipefail
+
+BASE_URL="http://localhost:8080"
+COOKIE_JAR="./agent.cookies"
+touch "$COOKIE_JAR"
+
+curl --fail-with-body --silent --show-error \
+  -b "$COOKIE_JAR" -c "$COOKIE_JAR" \
+  "$BASE_URL/api/v1/auth/me" | jq -e . >/dev/null
+
+CSRF=$(curl --fail-with-body --silent --show-error \
+  -b "$COOKIE_JAR" -c "$COOKIE_JAR" \
+  "$BASE_URL/api/v1/auth/csrf" | jq -er '.token')
+
+GAME_JSON=$(curl --fail-with-body --silent --show-error \
+  -b "$COOKIE_JAR" -c "$COOKIE_JAR" \
   -H "X-XSRF-TOKEN: $CSRF" \
-  -X POST "$BASE_URL/api/v1/games" | jq -r '.state.gameId')
+  -X POST "$BASE_URL/api/v1/games")
+
+GAME_ID=$(jq -er '.state.gameId' <<<"$GAME_JSON")
+printf '%s\n' "$GAME_ID"
 ```
+
+Give the printed `GAME_ID` to the other player. There is no
+`GET /api/v1/games` listing endpoint; do not try to discover the created game by
+probing that path.
 
 ### Option B: Join an existing game
 
 ```bash
-curl -s -b "$COOKIE_JAR" -c "$COOKIE_JAR" \
+set -euo pipefail
+
+BASE_URL="http://localhost:8080"
+COOKIE_JAR="./agent.cookies"
+GAME_ID="replace-with-host-game-id"
+touch "$COOKIE_JAR"
+
+curl --fail-with-body --silent --show-error \
+  -b "$COOKIE_JAR" -c "$COOKIE_JAR" \
+  "$BASE_URL/api/v1/auth/me" | jq -e . >/dev/null
+
+CSRF=$(curl --fail-with-body --silent --show-error \
+  -b "$COOKIE_JAR" -c "$COOKIE_JAR" \
+  "$BASE_URL/api/v1/auth/csrf" | jq -er '.token')
+
+curl --fail-with-body --silent --show-error \
+  -b "$COOKIE_JAR" -c "$COOKIE_JAR" \
   -H "X-XSRF-TOKEN: $CSRF" \
-  -X PUT "$BASE_URL/api/v1/games/$GAME_ID/players/me"
+  -X PUT "$BASE_URL/api/v1/games/$GAME_ID/players/me" | jq -e .
 ```
 
 ## Agent Decision Loop (Game-Agnostic)
@@ -100,13 +213,17 @@ curl -s -b "$COOKIE_JAR" -c "$COOKIE_JAR" \
 1. Fetch rules once (or when game changes):
 
 ```bash
-RULES_JSON=$(curl -s -b "$COOKIE_JAR" "$BASE_URL/api/v1/games/$GAME_ID/rules")
+RULES_JSON=$(curl --fail-with-body --silent --show-error \
+  -b "$COOKIE_JAR" -c "$COOKIE_JAR" \
+  "$BASE_URL/api/v1/games/$GAME_ID/rules")
 ```
 
 2. Fetch current state:
 
 ```bash
-STATE_JSON=$(curl -s -b "$COOKIE_JAR" "$BASE_URL/api/v1/games/$GAME_ID/state")
+STATE_JSON=$(curl --fail-with-body --silent --show-error \
+  -b "$COOKIE_JAR" -c "$COOKIE_JAR" \
+  "$BASE_URL/api/v1/games/$GAME_ID/state")
 ```
 
 3. Determine candidate action from:
@@ -129,7 +246,12 @@ that choice as an action allowed by `rules.actions[]`.
 ACTION_TYPE="REPLACE_WITH_RULE_ACTION"
 ACTION_PAYLOAD='{}'
 
-RESULT=$(curl -s -b "$COOKIE_JAR" -c "$COOKIE_JAR" \
+CSRF=$(curl --fail-with-body --silent --show-error \
+  -b "$COOKIE_JAR" -c "$COOKIE_JAR" \
+  "$BASE_URL/api/v1/auth/csrf" | jq -er '.token')
+
+RESULT=$(curl --fail-with-body --silent --show-error \
+  -b "$COOKIE_JAR" -c "$COOKIE_JAR" \
   -H "content-type: application/json" \
   -H "X-XSRF-TOKEN: $CSRF" \
   -X POST "$BASE_URL/api/v1/games/$GAME_ID/actions" \
@@ -145,7 +267,9 @@ RESULT=$(curl -s -b "$COOKIE_JAR" -c "$COOKIE_JAR" \
 
 ```bash
 AFTER_SEQ=0
-EVENTS=$(curl -s -b "$COOKIE_JAR" "$BASE_URL/api/v1/games/$GAME_ID/events?afterSequence=$AFTER_SEQ")
+EVENTS=$(curl --fail-with-body --silent --show-error \
+  -b "$COOKIE_JAR" -c "$COOKIE_JAR" \
+  "$BASE_URL/api/v1/games/$GAME_ID/events?afterSequence=$AFTER_SEQ")
 ```
 
 Update `AFTER_SEQ` to the max received `sequence` and continue.
@@ -168,11 +292,15 @@ budget is exhausted.
 
 ## Error Handling
 
-- `401/403`: not authenticated or not authorized for this game.
-- `403` on mutating requests may be CSRF-related; refresh token and retry.
+- Empty `403`: usually no authenticated session or invalid CSRF. Call `/auth/me`
+  with both `-b` and `-c`. If that fails, log in again. Otherwise refresh CSRF
+  with both `-b` and `-c`, then retry the mutation once.
+- ProblemDetail `403`: authenticated actor is not a participant in that game.
 - `404`: game does not exist.
 - `409`: conflict (for example, join when game is full).
 - `400`: invalid request shape or parameters.
+- Never use plain `curl -s`; use `--fail-with-body --silent --show-error` so an
+  HTTP error cannot be mistaken for an empty successful response.
 
 ## Multi-Agent / Two-User Testing Pattern
 
@@ -184,12 +312,9 @@ budget is exhausted.
 
 When you tell an autonomous agent to "go", provide:
 
-1. `BASE_URL`
-2. credentials to use (or instruction to register new users)
-3. whether to create or join game
-4. target `gameId` if joining
-5. win condition / objective (if external to rules)
+1. path to the runtime text file (for example `docs/agent-client-runtime.txt`)
+2. objective (for example "play to win" or another external win condition)
 
 ## Suggested Prompt Snippet
 
-"Use `docs/agent-client-skill.md` as your execution guide. Authenticate, join or create a game, fetch `/rules`, and only submit actions that satisfy the returned schema. Continue until terminal game state or max turn budget. Log every request/response summary, and at completion write a detailed log of all game events (including turn ownership and host/opponent designation) to `./logs/{gameId}.json`, creating the directory if needed."
+"Use `docs/agent-client-skill.md` as your execution guide. First read runtime values from `docs/agent-client-runtime.txt` (including `BASE_URL`, `MODE`, and `GAME_ID` when `MODE=join`). Authenticate, join or create based on `MODE`, fetch `/rules`, and only submit actions that satisfy the returned schema. Continue until terminal game state or max turn budget. Log every request/response summary, and at completion write a detailed log of all game events (including turn ownership and host/opponent designation) to the configured `EVENT_LOG_PATH`, creating the parent directory if needed."
