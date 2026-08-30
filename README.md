@@ -1,19 +1,15 @@
 # Agent Engine
 
-Agent Engine is a Spring Boot library for authoritative, turn-based game simulation.
+Agent Engine is a Spring Boot library for authoritative, turn-based multiplayer game simulation.
 
-You provide one `GameRules` implementation, and the library provides:
+You provide exactly one `GameRules` bean, and the library provides:
 
-- HTTP endpoints (`/api/v1/games`, `/state`, `/actions`, `/events`)
-- session lifecycle and server-owned game state
-- append-only event sequencing
-- validation + ProblemDetail error responses
-- default in-memory persistence for quick starts
-
-The fastest way to learn the contract is the starter example:
-
-- `examples/src/main/java/dev/phlawless/agentengine/examples/starter/StarterGameRules.java`
-- `examples/src/main/java/dev/phlawless/agentengine/examples/starter/StarterGameState.java`
+- account registration + session login
+- CSRF-protected HTTP API
+- game lifecycle (`create`, `join`, `state`, `actions`, `events`)
+- server-owned state transitions with append-only events
+- ProblemDetail error responses
+- default in-memory repositories for quick starts
 
 ## Project layout
 
@@ -74,7 +70,7 @@ public class MyGameApplication {
 
 ### 2) Implement your `GameState`
 
-`toObservable()` defines the game-specific JSON shown in `GET /games/{gameId}/state`.
+`toObservable()` defines game-specific JSON returned by `GET /api/v1/games/{gameId}/state`.
 
 ```java
 import dev.phlawless.agentengine.game.domain.GameState;
@@ -108,6 +104,7 @@ import dev.phlawless.agentengine.game.domain.Command;
 import dev.phlawless.agentengine.game.domain.EventSpec;
 import dev.phlawless.agentengine.game.domain.GameRules;
 import dev.phlawless.agentengine.game.domain.GameState;
+import dev.phlawless.agentengine.game.domain.PlayerContext;
 import dev.phlawless.agentengine.game.domain.RuleResult;
 
 import java.time.Instant;
@@ -120,6 +117,11 @@ public class MyGameRules implements GameRules {
     public static final String PLAYED_EVENT = "PLAYED";
 
     @Override
+    public int requiredPlayerCount() {
+        return 2;
+    }
+
+    @Override
     public Set<String> actionTypes() {
         return Set.of(PLAY_ACTION);
     }
@@ -130,7 +132,7 @@ public class MyGameRules implements GameRules {
     }
 
     @Override
-    public RuleResult evaluate(GameState state, Command command, int turn, Instant now) {
+    public RuleResult evaluate(GameState state, Command command, PlayerContext player, int turn, Instant now) {
         if (!(state instanceof MyGameState myState)) {
             return RuleResult.reject("Invalid state for my game");
         }
@@ -141,47 +143,116 @@ public class MyGameRules implements GameRules {
         MyGameState next = myState.applyPlay();
         EventSpec event = new EventSpec(
                 PLAYED_EVENT,
-                Map.of("turn", Integer.toString(turn + 1)));
+                Map.of("seat", Integer.toString(player.seat()), "turn", Integer.toString(turn + 1)));
         return RuleResult.accept(next, List.of(event));
     }
 }
 ```
 
-### 4) Run and call the API
+### 4) Run
 
 ```bash
 ./mvnw spring-boot:run
 ```
 
-```bash
-# Create a game
-curl -s -X POST http://localhost:8080/api/v1/games
+## Two-player API quickstart (register/login/create/join/play)
 
-# Submit an action
-curl -s -X POST http://localhost:8080/api/v1/games/<gameId>/actions \
-  -H 'content-type: application/json' \
-  -d '{"type":"PLAY","payload":{}}'
+Base path: `/api/v1`
+
+This API uses session auth + CSRF. For every mutating request (`POST`, `PUT`, `DELETE`), send:
+
+- session cookie (`JSESSIONID`)
+- CSRF cookie (`XSRF-TOKEN`)
+- CSRF header (default `X-XSRF-TOKEN`)
+
+Example flow with two users:
+
+```bash
+# terminal vars
+BASE_URL="http://localhost:8080"
+
+# 1) Get CSRF for alice session
+ALICE_CSRF=$(curl -s -c alice.cookies "$BASE_URL/api/v1/auth/csrf" | jq -r '.token')
+
+# 2) Register alice
+curl -s -b alice.cookies -c alice.cookies \
+  -H "content-type: application/json" \
+  -H "X-XSRF-TOKEN: $ALICE_CSRF" \
+  -X POST "$BASE_URL/api/v1/accounts" \
+  -d '{"username":"alice","password":"alice-password-123"}'
+
+# 3) Login alice
+curl -s -b alice.cookies -c alice.cookies \
+  -H "content-type: application/json" \
+  -H "X-XSRF-TOKEN: $ALICE_CSRF" \
+  -X POST "$BASE_URL/api/v1/auth/login" \
+  -d '{"username":"alice","password":"alice-password-123"}'
+
+# 4) Get CSRF for bob session
+BOB_CSRF=$(curl -s -c bob.cookies "$BASE_URL/api/v1/auth/csrf" | jq -r '.token')
+
+# 5) Register bob
+curl -s -b bob.cookies -c bob.cookies \
+  -H "content-type: application/json" \
+  -H "X-XSRF-TOKEN: $BOB_CSRF" \
+  -X POST "$BASE_URL/api/v1/accounts" \
+  -d '{"username":"bob","password":"bob-password-123"}'
+
+# 6) Login bob
+curl -s -b bob.cookies -c bob.cookies \
+  -H "content-type: application/json" \
+  -H "X-XSRF-TOKEN: $BOB_CSRF" \
+  -X POST "$BASE_URL/api/v1/auth/login" \
+  -d '{"username":"bob","password":"bob-password-123"}'
+
+# 7) Alice creates game
+GAME_ID=$(curl -s -b alice.cookies -c alice.cookies \
+  -H "X-XSRF-TOKEN: $ALICE_CSRF" \
+  -X POST "$BASE_URL/api/v1/games" | jq -r '.state.gameId')
+
+# 8) Bob joins
+curl -s -b bob.cookies -c bob.cookies \
+  -H "X-XSRF-TOKEN: $BOB_CSRF" \
+  -X PUT "$BASE_URL/api/v1/games/$GAME_ID/players/me"
+
+# 9) Alice plays
+curl -s -b alice.cookies -c alice.cookies \
+  -H "content-type: application/json" \
+  -H "X-XSRF-TOKEN: $ALICE_CSRF" \
+  -X POST "$BASE_URL/api/v1/games/$GAME_ID/actions" \
+  -d '{"type":"PLACE_MARKER","payload":{"position":0}}'
+
+# 10) Bob reads state/events
+curl -s -b bob.cookies "$BASE_URL/api/v1/games/$GAME_ID/state"
+curl -s -b bob.cookies "$BASE_URL/api/v1/games/$GAME_ID/events?afterSequence=0"
 ```
 
 ## Rules contract reference
 
+- `requiredPlayerCount()` defines when a game is ready.
 - `Command` shape is `type: String` and `payload: Map<String, Object>`.
+- `PlayerContext` contains actor identity and seat.
 - `EventSpec` shape is `type: String` and `details: Map<String, String>`.
-- `RuleResult.reject(...)` means no state change, no event emission, and no turn increment.
-- `RuleResult.accept(...)` applies the new state, emits events, and increments turn by 1.
+- `RuleResult.reject(...)` means no state change, no event emission, no turn increment.
+- `RuleResult.accept(...)` applies new state, emits events, and increments turn by 1.
 - `actionTypes()` is exposed to clients in state responses as available actions.
 
 ## Auto-configuration behavior
 
-`agent-engine` auto-registers the API and service layer. You do **not** need to scan `dev.phlawless.agentengine`.
+`agent-engine` auto-registers API and service layers. You do not need package scanning for `dev.phlawless.agentengine`.
 
 Defaults provided by the library:
 
 - `GameController`
+- `AccountController`
+- `AuthenticationController`
 - `RestExceptionHandler`
 - `GameService`
+- `AccountService`
 - `Clock` (`Clock.systemUTC()`)
 - `GameRepository` (`InMemoryGameRepository`)
+- `AccountRepository` (`InMemoryAccountRepository`)
+- Spring Security filter chain with session auth + CSRF enabled
 
 You must provide exactly one `GameRules` bean.
 
@@ -192,12 +263,21 @@ You must provide exactly one `GameRules` bean.
 
 You can replace defaults with your own beans.
 
-Custom repository example:
+Custom game repository example:
 
 ```java
 @Bean
 GameRepository gameRepository() {
     return new PostgresGameRepository();
+}
+```
+
+Custom account repository example:
+
+```java
+@Bean
+AccountRepository accountRepository() {
+    return new PostgresAccountRepository();
 }
 ```
 
@@ -208,23 +288,6 @@ Custom clock example:
 Clock gameClock() {
     return Clock.systemUTC();
 }
-```
-
-## API quick example
-
-Base path: `/api/v1`
-
-```bash
-# Create a game
-curl -s -X POST http://localhost:8080/api/v1/games
-
-# Submit an action
-curl -s -X POST http://localhost:8080/api/v1/games/<gameId>/actions \
-  -H 'content-type: application/json' \
-  -d '{"type":"PLACE_MARKER","payload":{"position":0}}'
-
-# Read events after sequence 0
-curl -s "http://localhost:8080/api/v1/games/<gameId>/events?afterSequence=0"
 ```
 
 ## Run the reference app
