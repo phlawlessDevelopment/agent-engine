@@ -20,6 +20,8 @@ Swap `tictactoe` for `wait` or `starter`.
 
 ## Client Skills
 
-- `examples/tictactoe/clients/agent-engine-tictactoe-player/SKILL.md`
+- Game-agnostic Agent Engine client protocol: `docs/agent-client-skill.md`
+- TicTacToe strategy only: `examples/tictactoe/clients/agent-engine-tictactoe-player/SKILL.md`
 
-For the game-agnostic interaction protocol, see `docs/agent-client-skill.md`.
+Compose the client protocol with a game-specific strategy; game skills should
+not duplicate authentication, HTTP, polling, recovery, or logging guidance.

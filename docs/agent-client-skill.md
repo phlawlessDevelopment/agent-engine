@@ -4,6 +4,10 @@ Use this file as a reusable playbook for an autonomous agent that needs to inter
 
 This is game-agnostic. It does not assume any specific `GameRules` implementation.
 
+Game-specific skills are strategy modules only. They may interpret the state and
+rules for a particular game and select a candidate action, but this client guide
+owns authentication, game lifecycle, HTTP requests, polling, retries, and logs.
+
 ## Goal
 
 Given a running Agent Engine server, the agent should be able to:
@@ -20,6 +24,12 @@ Given a running Agent Engine server, the agent should be able to:
 - API base path is `/api/v1`.
 - Session auth + CSRF are enabled.
 - `jq` is available for JSON extraction.
+
+Optional runtime controls:
+
+- maximum accepted actions or turns before stopping,
+- state/event polling interval,
+- path for the final event log.
 
 ## Required Endpoints
 
@@ -106,6 +116,11 @@ STATE_JSON=$(curl -s -b "$COOKIE_JAR" "$BASE_URL/api/v1/games/$GAME_ID/state")
 - `state.state` (current observable values),
 - `state.turn`, `state.ready`, and participant data.
 
+If a game-specific strategy skill is available, give it the rules, observable
+state, and the actor's participant information. It should return a strategic
+choice, not perform HTTP requests. The client remains responsible for encoding
+that choice as an action allowed by `rules.actions[]`.
+
 4. Build action payload that satisfies schema constraints.
 
 5. Submit action:
@@ -135,6 +150,11 @@ EVENTS=$(curl -s -b "$COOKIE_JAR" "$BASE_URL/api/v1/games/$GAME_ID/events?afterS
 
 Update `AFTER_SEQ` to the max received `sequence` and continue.
 
+When the game is not ready, it is not the actor's turn, or no action should be
+submitted yet, wait for the configured polling interval and fetch fresh state.
+Stop on a terminal state described by the game rules or when the configured
+budget is exhausted.
+
 ## Minimal Agent Policy
 
 - Always call `/rules` before first move.
@@ -142,6 +162,9 @@ Update `AFTER_SEQ` to the max received `sequence` and continue.
 - Validate payload against `rules.actions[*].payload` constraints before submit.
 - Treat server as source of truth for legality and state progression.
 - On rejection, adapt using returned message and latest state.
+- Keep game strategy separate from transport and lifecycle handling.
+- Record request/response summaries, action choices, and emitted events.
+- At completion, write the collected game events to the configured log path.
 
 ## Error Handling
 
@@ -169,4 +192,4 @@ When you tell an autonomous agent to "go", provide:
 
 ## Suggested Prompt Snippet
 
-"Use `docs/agent-client-skill.md` as your execution guide. Authenticate, join or create a game, fetch `/rules`, and only submit actions that satisfy the returned schema. Continue until terminal game state or max turn budget. Log every request/response summary."
+"Use `docs/agent-client-skill.md` as your execution guide. Authenticate, join or create a game, fetch `/rules`, and only submit actions that satisfy the returned schema. Continue until terminal game state or max turn budget. Log every request/response summary, and at completion write a detailed log of all game events (including turn ownership and host/opponent designation) to `./logs/{gameId}.json`, creating the directory if needed."
