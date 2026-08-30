@@ -5,6 +5,7 @@ import dev.phlawless.agentengine.examples.tictactoe.TicTacToeRules;
 import dev.phlawless.agentengine.game.domain.Command;
 import dev.phlawless.agentengine.game.domain.GameEvent;
 import dev.phlawless.agentengine.game.domain.GameRules;
+import dev.phlawless.agentengine.game.domain.GameRulesDescription;
 import dev.phlawless.agentengine.game.domain.GameSnapshot;
 import dev.phlawless.agentengine.game.infrastructure.InMemoryGameRepository;
 import org.junit.jupiter.api.Test;
@@ -72,6 +73,23 @@ class GameServiceTest {
                 .isInstanceOf(NotGameParticipantException.class);
         assertThatThrownBy(() -> service.getEvents(created.gameId(), CAROL.accountId(), 0))
                 .isInstanceOf(NotGameParticipantException.class);
+        assertThatThrownBy(() -> service.getRules(created.gameId(), CAROL.accountId()))
+                .isInstanceOf(NotGameParticipantException.class);
+    }
+
+    @Test
+    void participantCanReadRulesDescription() {
+        GameService service = buildService();
+        GameSnapshot created = service.createGame(ALICE);
+        service.joinGame(created.gameId(), BOB);
+
+        GameRulesDescription rules = service.getRules(created.gameId(), ALICE.accountId());
+
+        assertThat(rules.game()).isEqualTo("TicTacToe");
+        assertThat(rules.actions()).extracting(action -> action.type())
+                .containsExactly(TicTacToeRules.PLACE_MARKER_ACTION);
+        assertThat(rules.actions().getFirst().payload()).containsKey("position");
+        assertThat(rules.observableState()).containsKeys("board", "currentPlayer", "status", "winner");
     }
 
     @Test

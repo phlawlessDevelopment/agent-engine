@@ -2,10 +2,14 @@ package dev.phlawless.agentengine.examples.starter;
 
 import dev.phlawless.agentengine.game.domain.Command;
 import dev.phlawless.agentengine.game.domain.EventSpec;
+import dev.phlawless.agentengine.game.domain.EventSchema;
+import dev.phlawless.agentengine.game.domain.GameRulesDescription;
 import dev.phlawless.agentengine.game.domain.GameRules;
 import dev.phlawless.agentengine.game.domain.GameState;
 import dev.phlawless.agentengine.game.domain.PlayerContext;
 import dev.phlawless.agentengine.game.domain.RuleResult;
+import dev.phlawless.agentengine.game.domain.ActionSchema;
+import dev.phlawless.agentengine.game.domain.ValueSchema;
 
 import java.time.Instant;
 import java.util.List;
@@ -50,5 +54,37 @@ public class StarterGameRules implements GameRules {
                         "at", now.toString()));
 
         return RuleResult.accept(nextState, List.of(event));
+    }
+
+    @Override
+    public GameRulesDescription describe() {
+        return new GameRulesDescription(
+                "Starter",
+                "Single-player starter game that increments move count each turn.",
+                requiredPlayerCount(),
+                List.of(new ActionSchema(
+                        TAKE_TURN_ACTION,
+                        "Increment move count and emit a TURN_TAKEN event.",
+                        Map.of()
+                )),
+                Map.of(
+                        "moveCount", new ValueSchema("integer", true, "Total accepted turns so far.", Map.of("min", 0)),
+                        "status", new ValueSchema(
+                                "string",
+                                true,
+                                "Current game status.",
+                                Map.of("enum", List.of(StarterGameState.IN_PROGRESS))
+                        )
+                ),
+                List.of(new EventSchema(
+                        TURN_TAKEN_EVENT,
+                        "A turn was accepted.",
+                        Map.of(
+                                "turn", new ValueSchema("string", true, "New turn number as a string.", Map.of()),
+                                "moveCount", new ValueSchema("string", true, "New move count as a string.", Map.of()),
+                                "at", new ValueSchema("string", true, "UTC timestamp for the accepted turn.", Map.of("format", "date-time"))
+                        )
+                ))
+        );
     }
 }

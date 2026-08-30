@@ -56,6 +56,15 @@ class GameControllerIntegrationTest {
                 .andExpect(jsonPath("$.state.ready").value(true))
                 .andExpect(jsonPath("$.state.players.length()").value(2));
 
+        mockMvc.perform(get("/api/v1/games/{gameId}/rules", createdGameId)
+                        .session(aliceSession))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.game").value("TicTacToe"))
+                .andExpect(jsonPath("$.actions[0].type").value("PLACE_MARKER"))
+                .andExpect(jsonPath("$.actions[0].payload.position.type").value("integer"))
+                .andExpect(jsonPath("$.actions[0].payload.position.constraints.min").value(0))
+                .andExpect(jsonPath("$.actions[0].payload.position.constraints.max").value(8));
+
         mockMvc.perform(post("/api/v1/games/{gameId}/actions", createdGameId)
                         .session(bobSession)
                         .with(csrf())
@@ -107,6 +116,10 @@ class GameControllerIntegrationTest {
                 .andExpect(jsonPath("$.title").value("Game is full"));
 
         mockMvc.perform(get("/api/v1/games/{gameId}/state", gameId)
+                        .session(carolSession))
+                .andExpect(status().isForbidden());
+
+        mockMvc.perform(get("/api/v1/games/{gameId}/rules", gameId)
                         .session(carolSession))
                 .andExpect(status().isForbidden());
     }

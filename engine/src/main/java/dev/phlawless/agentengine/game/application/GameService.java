@@ -5,6 +5,7 @@ import dev.phlawless.agentengine.game.domain.Command;
 import dev.phlawless.agentengine.game.domain.Game;
 import dev.phlawless.agentengine.game.domain.GameEvent;
 import dev.phlawless.agentengine.game.domain.GameRules;
+import dev.phlawless.agentengine.game.domain.GameRulesDescription;
 import dev.phlawless.agentengine.game.domain.GameSnapshot;
 import dev.phlawless.agentengine.game.domain.RuleResult;
 
@@ -45,6 +46,13 @@ public class GameService {
         return withGame(gameId, game -> {
             game.requireParticipant(accountId);
             return game.snapshot();
+        });
+    }
+
+    public GameRulesDescription getRules(UUID gameId, UUID accountId) {
+        return withGame(gameId, game -> {
+            game.requireParticipant(accountId);
+            return rules.describe();
         });
     }
 

@@ -215,14 +215,17 @@ curl -s -b bob.cookies -c bob.cookies \
   -H "X-XSRF-TOKEN: $BOB_CSRF" \
   -X PUT "$BASE_URL/api/v1/games/$GAME_ID/players/me"
 
-# 9) Alice plays
+# 9) Alice (or any participant) fetches machine-readable rules
+curl -s -b alice.cookies "$BASE_URL/api/v1/games/$GAME_ID/rules"
+
+# 10) Alice plays
 curl -s -b alice.cookies -c alice.cookies \
   -H "content-type: application/json" \
   -H "X-XSRF-TOKEN: $ALICE_CSRF" \
   -X POST "$BASE_URL/api/v1/games/$GAME_ID/actions" \
   -d '{"type":"PLACE_MARKER","payload":{"position":0}}'
 
-# 10) Bob reads state/events
+# 11) Bob reads state/events
 curl -s -b bob.cookies "$BASE_URL/api/v1/games/$GAME_ID/state"
 curl -s -b bob.cookies "$BASE_URL/api/v1/games/$GAME_ID/events?afterSequence=0"
 ```
@@ -233,6 +236,7 @@ curl -s -b bob.cookies "$BASE_URL/api/v1/games/$GAME_ID/events?afterSequence=0"
 - `Command` shape is `type: String` and `payload: Map<String, Object>`.
 - `PlayerContext` contains actor identity and seat.
 - `EventSpec` shape is `type: String` and `details: Map<String, String>`.
+- `describe()` returns structured JSON metadata for agentic clients at `GET /api/v1/games/{gameId}/rules`.
 - `RuleResult.reject(...)` means no state change, no event emission, no turn increment.
 - `RuleResult.accept(...)` applies new state, emits events, and increments turn by 1.
 - `actionTypes()` is exposed to clients in state responses as available actions.

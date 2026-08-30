@@ -2,10 +2,14 @@ package dev.phlawless.agentengine.examples.tictactoe;
 
 import dev.phlawless.agentengine.game.domain.Command;
 import dev.phlawless.agentengine.game.domain.EventSpec;
+import dev.phlawless.agentengine.game.domain.EventSchema;
+import dev.phlawless.agentengine.game.domain.GameRulesDescription;
 import dev.phlawless.agentengine.game.domain.GameRules;
 import dev.phlawless.agentengine.game.domain.GameState;
 import dev.phlawless.agentengine.game.domain.PlayerContext;
 import dev.phlawless.agentengine.game.domain.RuleResult;
+import dev.phlawless.agentengine.game.domain.ActionSchema;
+import dev.phlawless.agentengine.game.domain.ValueSchema;
 
 import java.time.Instant;
 import java.util.ArrayList;
@@ -103,6 +107,71 @@ public class TicTacToeRules implements GameRules {
                         TicTacToeState.IN_PROGRESS,
                         ""),
                 events);
+    }
+
+    @Override
+    public GameRulesDescription describe() {
+        return new GameRulesDescription(
+                "TicTacToe",
+                "Two players take turns placing markers on a 3x3 board. First to three in a row wins.",
+                requiredPlayerCount(),
+                List.of(new ActionSchema(
+                        PLACE_MARKER_ACTION,
+                        "Place your marker in an empty board cell.",
+                        Map.of("position", new ValueSchema(
+                                "integer",
+                                true,
+                                "Board index from 0 to 8.",
+                                Map.of("min", 0, "max", 8)
+                        ))
+                )),
+                Map.of(
+                        "board", new ValueSchema(
+                                "array<string>",
+                                true,
+                                "Length-9 board where each value is \"\", \"X\", or \"O\".",
+                                Map.of("size", BOARD_SIZE)
+                        ),
+                        "currentPlayer", new ValueSchema(
+                                "string",
+                                true,
+                                "Marker whose turn is next.",
+                                Map.of("enum", List.of(TicTacToeState.PLAYER_X, TicTacToeState.PLAYER_O))
+                        ),
+                        "status", new ValueSchema(
+                                "string",
+                                true,
+                                "Current game status.",
+                                Map.of("enum", List.of(TicTacToeState.IN_PROGRESS, TicTacToeState.WINNER, TicTacToeState.DRAW))
+                        ),
+                        "winner", new ValueSchema(
+                                "string",
+                                true,
+                                "Winning marker when status is WINNER, otherwise empty string.",
+                                Map.of("enum", List.of("", TicTacToeState.PLAYER_X, TicTacToeState.PLAYER_O))
+                        )
+                ),
+                List.of(
+                        new EventSchema(
+                                MARKER_PLACED_EVENT,
+                                "A marker was placed on the board.",
+                                Map.of(
+                                        "position", new ValueSchema("string", true, "Board index written by the actor.", Map.of()),
+                                        "marker", new ValueSchema("string", true, "Marker placed in that position.", Map.of())
+                                )
+                        ),
+                        new EventSchema(
+                                GAME_WON_EVENT,
+                                "The game ended with a winner.",
+                                Map.of("winner", new ValueSchema("string", true, "Winning marker.", Map.of()))
+                        ),
+                        new EventSchema(
+                                GAME_DRAWN_EVENT,
+                                "The board filled with no winner.",
+                                Map.of()
+                        )
+                )
+        );
     }
 
     private Integer parsePosition(Command command) {
