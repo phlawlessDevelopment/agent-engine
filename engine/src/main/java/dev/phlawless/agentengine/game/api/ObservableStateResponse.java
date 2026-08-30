@@ -7,7 +7,6 @@ import java.util.UUID;
 
 public record ObservableStateResponse(
         UUID gameId,
-        String gameType,
         List<String> actions,
         int turn,
         Map<String, Object> state,

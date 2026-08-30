@@ -12,14 +12,8 @@ import java.util.Map;
 import java.util.Set;
 
 public class StarterGameRules implements GameRules {
-    public static final String GAME_TYPE = "starter";
     public static final String TAKE_TURN_ACTION = "TAKE_TURN";
     public static final String TURN_TAKEN_EVENT = "TURN_TAKEN";
-
-    @Override
-    public String gameType() {
-        return GAME_TYPE;
-    }
 
     @Override
     public Set<String> actionTypes() {

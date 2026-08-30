@@ -4,8 +4,6 @@ import java.time.Instant;
 import java.util.Set;
 
 public interface GameRules {
-    String gameType();
-
     Set<String> actionTypes();
 
     GameState initialState();

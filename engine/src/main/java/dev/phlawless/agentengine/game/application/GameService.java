@@ -6,39 +6,27 @@ import dev.phlawless.agentengine.game.domain.GameEvent;
 import dev.phlawless.agentengine.game.domain.GameRules;
 import dev.phlawless.agentengine.game.domain.GameSnapshot;
 import dev.phlawless.agentengine.game.domain.RuleResult;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.stereotype.Service;
 
 import java.time.Clock;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 
-@Service
 public class GameService {
     private final GameRepository gameRepository;
-    private final GameRulesRegistry rulesRegistry;
+    private final GameRules rules;
     private final Clock clock;
-    private final String defaultGameType;
 
     public GameService(
             GameRepository gameRepository,
-            GameRulesRegistry rulesRegistry,
-            Clock clock,
-            @Value("${agent-engine.default-game-type}") String defaultGameType) {
+            GameRules rules,
+            Clock clock) {
         this.gameRepository = gameRepository;
-        this.rulesRegistry = rulesRegistry;
+        this.rules = rules;
         this.clock = clock;
-        this.defaultGameType = defaultGameType;
     }
 
     public GameSnapshot createGame() {
-        return createGame(defaultGameType);
-    }
-
-    public GameSnapshot createGame(String gameType) {
-        String resolvedType = gameType == null ? defaultGameType : gameType;
-        GameRules rules = rulesRegistry.require(resolvedType);
         Game game = Game.create(UUID.randomUUID(), rules, Instant.now(clock));
         gameRepository.save(game);
         return game.snapshot();

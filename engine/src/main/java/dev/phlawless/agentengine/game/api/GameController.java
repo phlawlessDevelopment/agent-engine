@@ -29,9 +29,8 @@ public class GameController {
 
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
-    public CreateGameResponse createGame(@RequestBody(required = false) CreateGameRequest request) {
-        String gameType = request == null ? null : request.gameType();
-        GameSnapshot snapshot = gameService.createGame(gameType);
+    public CreateGameResponse createGame() {
+        GameSnapshot snapshot = gameService.createGame();
         return new CreateGameResponse(toObservableState(snapshot));
     }
 
@@ -71,7 +70,6 @@ public class GameController {
     private ObservableStateResponse toObservableState(GameSnapshot snapshot) {
         return new ObservableStateResponse(
                 snapshot.gameId(),
-                snapshot.gameType(),
                 snapshot.actionTypes(),
                 snapshot.turn(),
                 snapshot.state(),

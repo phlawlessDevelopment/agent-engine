@@ -29,30 +29,10 @@ class GameControllerIntegrationTest {
         mockMvc.perform(post("/api/v1/games"))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.state.gameId").isString())
-                .andExpect(jsonPath("$.state.gameType").value("tictactoe"))
                 .andExpect(jsonPath("$.state.actions[0]").value("PLACE_MARKER"))
                 .andExpect(jsonPath("$.state.turn").value(0))
                 .andExpect(jsonPath("$.state.state.board.length()").value(9))
                 .andExpect(jsonPath("$.state.state.currentPlayer").value("X"));
-    }
-
-    @Test
-    void createGameWithExplicitGameTypeUsesThatModule() throws Exception {
-        mockMvc.perform(post("/api/v1/games")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"gameType\":\"wait\"}"))
-                .andExpect(status().isCreated())
-                .andExpect(jsonPath("$.state.gameType").value("wait"))
-                .andExpect(jsonPath("$.state.actions[0]").value("WAIT"));
-    }
-
-    @Test
-    void createGameWithUnknownGameTypeReturnsProblemDetail() throws Exception {
-        mockMvc.perform(post("/api/v1/games")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"gameType\":\"nope\"}"))
-                .andExpect(status().isNotFound())
-                .andExpect(jsonPath("$.title").value("Unknown game type"));
     }
 
     @Test

@@ -8,10 +8,11 @@ Repository modules:
 - `examples`: runnable app + sample `GameRules` implementations
 
 - `game.api`: HTTP transport, request validation, response mapping
-- `game.application`: orchestration and use cases (`GameService`), rules registry contract
+- `game.application`: orchestration and use cases (`GameService`)
 - `game.domain`: authoritative simulation state, event emission, the `GameRules` SPI
-- `game.infrastructure`: in-memory repository, configured rules registry
-- `examples.*`: game-specific rule modules (`wait`, `tictactoe`) — each is a `GameRules` bean
+- `game.infrastructure`: in-memory repository
+- `autoconfigure`: Spring Boot auto-configuration that wires API/service defaults
+- `examples.*`: game-specific rule modules (`wait`, `tictactoe`); the app wires one active `GameRules` bean
 
 ## Core principles
 
@@ -23,8 +24,8 @@ Repository modules:
 
 ## The GameRules SPI
 
-A rules module declares its `gameType`, its action vocabulary, how to construct
-fresh state, and how to evaluate a command:
+A rules module declares its action vocabulary, how to construct fresh state,
+and how to evaluate a command:
 
 ```
 GameRules.evaluate(state, command, turn, now) -> RuleResult(accepted, message, nextState, events)
@@ -34,8 +35,10 @@ The engine owns session lifecycle, event sequencing, turn advancement (only for
 accepted actions), and concurrency. It treats `GameState` opaquely and only
 ever reads it through `toObservable()` for the projection.
 
-Modules are Spring beans collected into `ConfiguredGameRulesRegistry`; `gameType`
-strings must be unique. Unknown game types fail `POST /games` with a 404 problem.
+Each application deployment selects one `GameRules` implementation via Spring
+wiring. `POST /games` always creates sessions for that configured rules module.
+The engine library is imported without package scanning; Spring Boot discovers it
+through `AutoConfiguration.imports` metadata.
 
 ## Events
 

@@ -2,6 +2,7 @@ package dev.phlawless.agentengine.game.application;
 
 import dev.phlawless.agentengine.game.domain.Command;
 import dev.phlawless.agentengine.game.domain.GameEvent;
+import dev.phlawless.agentengine.game.domain.GameRules;
 import dev.phlawless.agentengine.game.domain.GameSnapshot;
 import dev.phlawless.agentengine.game.infrastructure.InMemoryGameRepository;
 import dev.phlawless.agentengine.examples.tictactoe.TicTacToeRules;
@@ -21,12 +22,11 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 class GameServiceTest {
 
     @Test
-    void createGameDefaultsToTicTacToeWithFreshBoard() {
+    void createGameUsesConfiguredRulesWithFreshBoard() {
         GameService service = buildService();
 
         GameSnapshot snapshot = service.createGame();
 
-        assertThat(snapshot.gameType()).isEqualTo("tictactoe");
         assertThat(snapshot.turn()).isZero();
         assertThat(snapshot.actionTypes()).containsExactly("PLACE_MARKER");
         assertThat(snapshot.state().get("board")).asList().hasSize(9).containsOnly("");
@@ -35,27 +35,9 @@ class GameServiceTest {
     }
 
     @Test
-    void createGameWithGameTypeUsesThatRulesModule() {
-        GameService service = buildService();
-
-        GameSnapshot snapshot = service.createGame("wait");
-
-        assertThat(snapshot.gameType()).isEqualTo("wait");
-        assertThat(snapshot.actionTypes()).containsExactly("WAIT");
-    }
-
-    @Test
-    void createGameWithUnknownGameTypeThrows() {
-        GameService service = buildService();
-
-        assertThatThrownBy(() -> service.createGame("nope"))
-                .isInstanceOf(UnknownGameTypeException.class);
-    }
-
-    @Test
     void waitActionAdvancesTurnAndEmitsEvent() {
-        GameService service = buildService();
-        GameSnapshot created = service.createGame("wait");
+        GameService service = buildService(new WaitRules());
+        GameSnapshot created = service.createGame();
 
         GameService.ActionExecutionResult result = service.executeAction(
                 created.gameId(),
@@ -216,28 +198,11 @@ class GameServiceTest {
     }
 
     private GameService buildService() {
-        Clock clock = Clock.fixed(Instant.parse("2026-08-29T12:00:00Z"), ZoneOffset.UTC);
-        GameRulesRegistry registry = new StubGameRulesRegistry(List.of(new WaitRules(), new TicTacToeRules()));
-        return new GameService(new InMemoryGameRepository(), registry, clock, "tictactoe");
+        return buildService(new TicTacToeRules());
     }
 
-    private static final class StubGameRulesRegistry implements GameRulesRegistry {
-        private final Map<String, dev.phlawless.agentengine.game.domain.GameRules> rulesByType;
-
-        private StubGameRulesRegistry(List<dev.phlawless.agentengine.game.domain.GameRules> rules) {
-            this.rulesByType = rules.stream()
-                    .collect(java.util.stream.Collectors.toMap(
-                            dev.phlawless.agentengine.game.domain.GameRules::gameType,
-                            java.util.function.Function.identity()));
-        }
-
-        @Override
-        public dev.phlawless.agentengine.game.domain.GameRules require(String gameType) {
-            dev.phlawless.agentengine.game.domain.GameRules rules = rulesByType.get(gameType);
-            if (rules == null) {
-                throw new UnknownGameTypeException(gameType);
-            }
-            return rules;
-        }
+    private GameService buildService(GameRules rules) {
+        Clock clock = Clock.fixed(Instant.parse("2026-08-29T12:00:00Z"), ZoneOffset.UTC);
+        return new GameService(new InMemoryGameRepository(), rules, clock);
     }
 }

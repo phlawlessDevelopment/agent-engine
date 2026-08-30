@@ -5,7 +5,6 @@ import dev.phlawless.agentengine.game.domain.EventSpec;
 import dev.phlawless.agentengine.game.domain.GameRules;
 import dev.phlawless.agentengine.game.domain.GameState;
 import dev.phlawless.agentengine.game.domain.RuleResult;
-import org.springframework.stereotype.Component;
 
 import java.time.Instant;
 import java.util.ArrayList;
@@ -13,9 +12,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
-@Component
 public class TicTacToeRules implements GameRules {
-    public static final String GAME_TYPE = "tictactoe";
     public static final String PLACE_MARKER_ACTION = "PLACE_MARKER";
     public static final String MARKER_PLACED_EVENT = "MARKER_PLACED";
     public static final String GAME_WON_EVENT = "GAME_WON";
@@ -27,11 +24,6 @@ public class TicTacToeRules implements GameRules {
             {0, 3, 6}, {1, 4, 7}, {2, 5, 8},
             {0, 4, 8}, {2, 4, 6}
     };
-
-    @Override
-    public String gameType() {
-        return GAME_TYPE;
-    }
 
     @Override
     public Set<String> actionTypes() {

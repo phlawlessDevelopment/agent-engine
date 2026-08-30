@@ -1,7 +1,6 @@
 package dev.phlawless.agentengine.game.api;
 
 import dev.phlawless.agentengine.game.application.GameNotFoundException;
-import dev.phlawless.agentengine.game.application.UnknownGameTypeException;
 import org.springframework.core.Ordered;
 import org.springframework.core.annotation.Order;
 import org.springframework.http.HttpStatus;
@@ -22,14 +21,6 @@ public class RestExceptionHandler {
         ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, exception.getMessage());
         problem.setTitle("Game not found");
         problem.setType(URI.create("https://agent-engine.dev/problems/game-not-found"));
-        return problem;
-    }
-
-    @ExceptionHandler(UnknownGameTypeException.class)
-    ProblemDetail handleUnknownGameType(UnknownGameTypeException exception) {
-        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, exception.getMessage());
-        problem.setTitle("Unknown game type");
-        problem.setType(URI.create("https://agent-engine.dev/problems/unknown-game-type"));
         return problem;
     }
 

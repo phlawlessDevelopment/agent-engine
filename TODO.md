@@ -5,7 +5,7 @@
 - [ ] Persist sessions/events to sqlite (currently in-memory only)
 - [ ] Add filesystem/CLI client adapter for agent workflows
 - [ ] Add authentication and player identity boundaries
-- [ ] Rules registry validation: duplicate/blank game types should fail loudly at startup
+- [ ] Strengthen startup validation so exactly one `GameRules` bean is active per deployment
 - [ ] Command/event payload types: consider moving from `Map<String,Object>` /
       `Map<String,String>` to a schema-per-game-type contract
 - [ ] Long-polling or SSE option for `/events` so agents don't busy-poll

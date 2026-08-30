@@ -1,114 +1,69 @@
 # Agent Engine
 
-An authoritative, agent-native game engine framework for turn-based games.
+Agent Engine is a Spring Boot library for authoritative, turn-based game simulation.
 
-This project gives you a reusable HTTP engine (`engine` module) and runnable
-reference implementations (`examples` module). You bring game rules; the engine
-handles game lifecycle, state transitions, event ordering, and API shape.
+You provide one `GameRules` implementation, and the library provides:
 
-## Why this exists
+- HTTP endpoints (`/api/v1/games`, `/state`, `/actions`, `/events`)
+- session lifecycle and server-owned game state
+- append-only event sequencing
+- validation + ProblemDetail error responses
+- default in-memory persistence for quick starts
 
-- Server-owned state keeps simulation authoritative and consistent.
-- Pluggable rules let each game define its own commands and transitions.
-- Append-only events make game progression observable for clients and agents.
-- Uniform API means agents can switch game types without transport changes.
-
-## Repository layout
+## Project layout
 
 | Module | Purpose |
 | --- | --- |
-| `engine` | Reusable framework (domain, service layer, API controllers, registry, in-memory store) |
-| `examples` | Runnable Spring Boot app plus sample games (`wait`, `tictactoe`, `starter`) |
+| `engine` | Reusable library consumed by other Spring Boot apps |
+| `examples` | Runnable sample app that consumes `engine` |
 
-Reference examples live under:
+Example rule implementations:
 
 - `examples/src/main/java/dev/phlawless/agentengine/examples/tictactoe`
 - `examples/src/main/java/dev/phlawless/agentengine/examples/wait`
 - `examples/src/main/java/dev/phlawless/agentengine/examples/starter`
 
-## Quick start
+## Add to your project
 
-Requirements:
-
-- JDK 27
-
-Run the example application:
+Until a Maven Central release is published, install locally first:
 
 ```bash
-./mvnw -pl examples spring-boot:run
+git clone https://github.com/phlawlessDevelopment/agent-engine.git
+cd agent-engine
+./mvnw install
 ```
 
-Run all tests:
+Then add the dependency in your own Spring Boot project:
 
-```bash
-./mvnw clean verify
+```xml
+<dependency>
+    <groupId>dev.phlawless</groupId>
+    <artifactId>agent-engine</artifactId>
+    <version>0.0.1-SNAPSHOT</version>
+</dependency>
 ```
 
-## API overview
+## Minimal consumer application
 
-Base path: `/api/v1`
+```java
+@SpringBootApplication
+public class MyGameApplication {
 
-- `POST /games` creates a game (`{"gameType":"tictactoe"}` optional).
-- `GET /games/{gameId}/state` returns current observable state.
-- `POST /games/{gameId}/actions` submits a command.
-- `GET /games/{gameId}/events?afterSequence=0` returns append-only events.
+    public static void main(String[] args) {
+        SpringApplication.run(MyGameApplication.class, args);
+    }
 
-Example flow:
-
-```bash
-# Create a game
-curl -s -X POST http://localhost:8080/api/v1/games \
-  -H 'content-type: application/json' \
-  -d '{"gameType":"tictactoe"}'
-
-# Submit an action
-curl -s -X POST http://localhost:8080/api/v1/games/<gameId>/actions \
-  -H 'content-type: application/json' \
-  -d '{"type":"PLACE_MARKER","payload":{"position":0}}'
-
-# Read events since sequence 0
-curl -s "http://localhost:8080/api/v1/games/<gameId>/events?afterSequence=0"
-```
-
-Observable state shape:
-
-```json
-{
-  "gameId": "f4f791dd-4be8-4b2f-b86a-70bc6f8d4a96",
-  "gameType": "tictactoe",
-  "actions": ["PLACE_MARKER"],
-  "turn": 0,
-  "state": {
-    "board": ["", "", "", "", "", "", "", "", ""],
-    "currentPlayer": "X",
-    "status": "IN_PROGRESS",
-    "winner": ""
-  },
-  "createdAt": "2026-08-30T12:00:00Z",
-  "updatedAt": "2026-08-30T12:00:00Z"
+    @Bean
+    GameRules gameRules() {
+        return new MyGameRules();
+    }
 }
 ```
 
-## Build your own game module
-
-Implement the `GameRules` SPI:
-
-1. Provide `gameType()` and `actionTypes()`.
-2. Return a fresh state from `initialState()`.
-3. Validate and apply commands in `evaluate(...)`.
-4. Emit events with `EventSpec` and return `RuleResult`.
-5. Add `@Component` so Spring auto-registers your rules bean.
-
-Minimal sketch:
+`MyGameRules` must implement `GameRules`:
 
 ```java
-@Component
 public class MyGameRules implements GameRules {
-    @Override
-    public String gameType() {
-        return "mygame";
-    }
-
     @Override
     public Set<String> actionTypes() {
         return Set.of("PLAY");
@@ -124,26 +79,81 @@ public class MyGameRules implements GameRules {
         if (!"PLAY".equals(command.type())) {
             return RuleResult.reject("Unknown action: " + command.type());
         }
-
         MyGameState next = ((MyGameState) state).apply(command);
-        EventSpec event = new EventSpec("PLAYED", Map.of("turn", Integer.toString(turn + 1)));
-        return RuleResult.accept(next, List.of(event));
+        return RuleResult.accept(next, List.of(new EventSpec("PLAYED", Map.of("turn", Integer.toString(turn + 1)))));
     }
 }
 ```
 
-For a copy/paste starter, use:
+## Auto-configuration behavior
 
-- `examples/src/main/java/dev/phlawless/agentengine/examples/starter/StarterGameRules.java`
-- `examples/src/main/java/dev/phlawless/agentengine/examples/starter/StarterGameState.java`
+`agent-engine` auto-registers the API and service layer. You do **not** need to scan `dev.phlawless.agentengine`.
 
-Then set your default game type in `application.properties`:
+Defaults provided by the library:
 
-```properties
-agent-engine.default-game-type=mygame
+- `GameController`
+- `RestExceptionHandler`
+- `GameService`
+- `Clock` (`Clock.systemUTC()`)
+- `GameRepository` (`InMemoryGameRepository`)
+
+You must provide exactly one `GameRules` bean.
+
+- zero `GameRules` beans -> startup fails
+- more than one `GameRules` bean -> startup fails
+
+## Overriding defaults
+
+You can replace defaults with your own beans.
+
+Custom repository example:
+
+```java
+@Bean
+GameRepository gameRepository() {
+    return new PostgresGameRepository();
+}
 ```
 
-## Architecture and roadmap
+Custom clock example:
 
-- Architecture notes: `docs/architecture.md`
-- Project roadmap: `TODO.md`
+```java
+@Bean
+Clock gameClock() {
+    return Clock.systemUTC();
+}
+```
+
+## API quick example
+
+Base path: `/api/v1`
+
+```bash
+# Create a game
+curl -s -X POST http://localhost:8080/api/v1/games
+
+# Submit an action
+curl -s -X POST http://localhost:8080/api/v1/games/<gameId>/actions \
+  -H 'content-type: application/json' \
+  -d '{"type":"PLACE_MARKER","payload":{"position":0}}'
+
+# Read events after sequence 0
+curl -s "http://localhost:8080/api/v1/games/<gameId>/events?afterSequence=0"
+```
+
+## Run the reference app
+
+```bash
+./mvnw -pl examples spring-boot:run
+```
+
+## Verify
+
+```bash
+./mvnw clean verify
+```
+
+## More docs
+
+- Architecture: `docs/architecture.md`
+- Roadmap: `TODO.md`

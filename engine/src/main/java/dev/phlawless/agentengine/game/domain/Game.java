@@ -29,7 +29,7 @@ public final class Game {
     public static Game create(UUID id, GameRules rules, Instant now) {
         Game game = new Game(id, rules, now);
         game.state = rules.initialState();
-        game.appendEvent("GAME_CREATED", now, Map.of("gameType", rules.gameType()));
+        game.appendEvent("GAME_CREATED", now, Map.of());
         return game;
     }
 
@@ -51,14 +51,9 @@ public final class Game {
         return id;
     }
 
-    public String gameType() {
-        return rules.gameType();
-    }
-
     public GameSnapshot snapshot() {
         return new GameSnapshot(
                 id,
-                rules.gameType(),
                 rules.actionTypes().stream().sorted().toList(),
                 turn,
                 state.toObservable(),
