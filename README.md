@@ -21,13 +21,13 @@ You provide exactly one `GameRules` bean, and the library provides:
 Example rule implementations:
 
 - `examples/tictactoe/src/main/java/dev/phlawless/agentengine/examples/tictactoe`
-- `examples/wait/src/main/java/dev/phlawless/agentengine/examples/wait`
-- `examples/starter/src/main/java/dev/phlawless/agentengine/examples/starter`
+- `examples/chess/src/main/java/dev/phlawless/agentengine/examples/chess`
 
 Client-side agent examples:
 
 - `examples/README.md`
 - `examples/tictactoe/clients/agent-engine-tictactoe-player/SKILL.md`
+- `examples/chess/clients/agent-engine-chess-player/SKILL.md`
 
 ## Add to your project
 
@@ -299,10 +299,14 @@ Clock gameClock() {
 }
 ```
 
-## Run the reference app
+## Run reference apps
 
 ```bash
 ./mvnw -pl examples/tictactoe -am spring-boot:run
+```
+
+```bash
+./mvnw -pl examples/chess -am spring-boot:run
 ```
 
 ## Verify

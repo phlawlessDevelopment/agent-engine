@@ -1,7 +1,7 @@
 # TODO
 
 - [x] Pluggable rule modules (`GameRules` SPI + registry)
-- [x] Reference modules: `wait`, `tictactoe` (worked example of the SPI)
+- [x] Reference modules: `tictactoe`, `chess` (worked example of the SPI)
 - [ ] Persist sessions/events to sqlite (currently in-memory only)
 - [ ] Add filesystem/CLI client adapter for agent workflows
 - [ ] Add authentication and player identity boundaries

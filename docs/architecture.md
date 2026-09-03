@@ -42,10 +42,10 @@ through `AutoConfiguration.imports` metadata.
 
 ## Events
 
-- `GAME_CREATED` — emitted by the engine for every session
-- Game-specific events (e.g. `MARKER_PLACED`, `GAME_WON`, `GAME_DRAWN`,
-  `TURN_ADVANCED`) — emitted by rules modules; the engine stamps them with the
-  sequence and current turn
+ - `GAME_CREATED` — emitted by the engine for every session
+ - Game-specific events (e.g. `MARKER_PLACED`, `GAME_WON`, `GAME_DRAWN`,
+   `MOVE_PLAYED`, `CHECK`) — emitted by rules modules; the engine stamps them with
+   the sequence and current turn
 
 Rejected commands emit nothing and leave state untouched; the response carries
 `accepted:false` and a reason.

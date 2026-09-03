@@ -16,8 +16,7 @@
 	<description>Server and client examples for agent-engine</description>
 
 	<modules>
-		<module>starter</module>
-		<module>wait</module>
 		<module>tictactoe</module>
+		<module>chess</module>
 	</modules>
 </project>
